@@ -1,0 +1,152 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Impuestos{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>🏷️ Impuestos</h3>
+    {% if session.get('role') == 'admin' %}
+<button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalCrearImpuesto">
+    ➕ Nuevo Impuesto
+</button>
+{% endif %}
+</div>
+
+<!-- Mostrar mensajes flash -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<!-- Tabla de impuestos -->
+{% if impuestos %}
+<div class="table-responsive">
+    <table class="table table-striped table-hover align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Tasa (%)</th>
+                <th class="text-center">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for impuesto in impuestos %}
+            <tr>
+                <td>{{ impuesto.id }}</td>
+                <td>{{ impuesto.codigo }}</td>
+                <td>{{ impuesto.descripcion }}</td>
+                <td>
+                    <span class="badge bg-info">{{ impuesto.tasa }}%</span>
+                </td>
+                <!-- Solo mostrar botón Nuevo Impuesto si es admin -->
+
+<!-- En la tabla, mostrar botones de acción solo si es admin -->
+<td class="text-center">
+    {% if session.get('role') == 'admin' %}
+    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" 
+            data-bs-target="#modalEditarImpuesto{{ impuesto.id }}">
+        ✏️ Editar
+    </button>
+    <form action="{{ url_for('impuestos.eliminar', impuesto_id=impuesto.id) }}" 
+          method="POST" style="display:inline;">
+        <button type="submit" class="btn btn-sm btn-danger" 
+                onclick="return confirm('¿Eliminar este impuesto?')">
+            🗑️ Eliminar
+        </button>
+    </form>
+    {% else %}
+    <span class="text-muted">Solo lectura</span>
+    {% endif %}
+</td>
+            </tr>
+            
+            <!-- Modal Editar Impuesto -->
+            <div class="modal fade" id="modalEditarImpuesto{{ impuesto.id }}" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ url_for('impuestos.editar', impuesto_id=impuesto.id) }}">
+                            <div class="modal-header bg-warning">
+                                <h5 class="modal-title">✏️ Editar Impuesto</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Código</label>
+                                    <input type="number" class="form-control" name="codigo" 
+                                           value="{{ impuesto.codigo }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Descripción</label>
+                                    <input type="text" class="form-control" name="descripcion" 
+                                           value="{{ impuesto.descripcion }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Tasa (%)</label>
+                                    <input type="number" class="form-control" name="tasa" 
+                                           value="{{ impuesto.tasa }}" step="0.01" min="0" required>
+                                    <small class="text-muted">Ejemplo: 19 para IVA, 13 para impuesto específico</small>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-warning">Guardar Cambios</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="alert alert-info">
+    No hay impuestos registrados. ¡Crea el primero!
+</div>
+{% endif %}
+
+<!-- Modal Crear Impuesto -->
+<div class="modal fade" id="modalCrearImpuesto" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('impuestos.crear') }}">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">➕ Nuevo Impuesto</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Código *</label>
+                        <input type="number" class="form-control" name="codigo" 
+                               placeholder="Ej: 1, 2, 3..." required>
+                        <small class="text-muted">Código numérico único del impuesto</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descripción *</label>
+                        <input type="text" class="form-control" name="descripcion" 
+                               placeholder="Ej: IVA, Impuesto Específico Bebidas, etc." required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tasa (%) *</label>
+                        <input type="number" class="form-control" name="tasa" 
+                               placeholder="19" step="0.01" min="0" required>
+                        <small class="text-muted">Porcentaje del impuesto (ej: 19, 13, 27, etc.)</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Crear Impuesto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

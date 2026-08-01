@@ -1,0 +1,265 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Productos{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>📦 Productos</h3>
+    <div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalProducto"
+                onclick="limpiarFormulario()" {% if not tiene_tenant %}disabled{% endif %}>
+            <i class="bi bi-plus-lg"></i> Nuevo Producto
+        </button>
+    </div>
+</div>
+
+<!-- Tabla de productos -->
+<div class="card shadow-sm">
+    <div class="card-body">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Código</th>  <!-- ← NUEVA COLUMNA -->
+                    <th>Nombre</th>
+                    <th>Descripción</th>
+                    <th>Precio</th>
+                    <th>Impuesto</th>
+                    {% if not tiene_tenant %}<th>Tenant</th>{% endif %}
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-productos">
+                <tr id="sin-datos">
+                    <td colspan="{{ '8' if not tiene_tenant else '7' }}" class="text-center text-muted py-4">
+                        <i class="bi bi-info-circle"></i> Cargando productos...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal para crear/editar producto -->
+<div class="modal fade" id="modalProducto" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitulo">Nuevo Producto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="form-producto">
+                    <input type="hidden" id="producto-id">
+                    
+                    <!-- CÓDIGO (NUEVO) -->
+                    <div class="mb-3">
+                        <label class="form-label">Código <small class="text-muted">(opcional)</small></label>
+                        <input type="text" class="form-control" id="codigo" 
+                               placeholder="Ej: PROD-001" maxlength="50">
+                        <small class="text-muted">Código único del producto (SKU, código de barras, etc.)</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Nombre *</label>
+                        <input type="text" class="form-control" id="nombre" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Descripción</label>
+                        <textarea class="form-control" id="descripcion" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Precio *</label>
+                        <input type="number" step="0.01" class="form-control" id="precio" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Impuesto</label>
+                        <select class="form-select" id="impuesto-id">
+                            <option value="">Sin impuesto</option>
+                            {% for impuesto in impuestos %}
+                            <option value="{{ impuesto.id }}">{{ impuesto.descripcion }} ({{ impuesto.tasa }}%)</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarProducto()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const API_URL = "http://127.0.0.1:8000";
+    const tieneTenant = {{ 'true' if tiene_tenant else 'false' }};
+
+    function getAuthHeaders() {
+        return {
+            "Authorization": "Bearer {{ session.get('token') }}",
+            "Content-Type": "application/json"
+        };
+    }
+
+    document.addEventListener("DOMContentLoaded", cargarProductos);
+
+    async function cargarProductos() {
+        try {
+            const resp = await fetch(`${API_URL}/productos/`, { headers: getAuthHeaders() });
+            if (!resp.ok) throw new Error("Error al cargar productos");
+            const productos = await resp.json();
+            renderTabla(productos);
+        } catch (e) {
+            console.error(e);
+            document.getElementById("tabla-productos").innerHTML = `
+                <tr><td colspan="${tieneTenant ? 7 : 8}" class="text-center text-danger py-4">
+                    Error al cargar productos
+                </td></tr>`;
+        }
+    }
+
+    function renderTabla(productos) {
+        const tbody = document.getElementById("tabla-productos");
+        const colspan = tieneTenant ? 7 : 8;  // ← ACTUALIZADO (7 con tenant, 8 sin tenant)
+        tbody.innerHTML = "";
+        
+        if (productos.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted py-4">
+                <i class="bi bi-inbox"></i> No hay productos
+            </td></tr>`;
+            return;
+        }
+        
+        productos.forEach(p => {
+            const tr = document.createElement("tr");
+            tr.id = `fila-${p.id}`;
+            
+            let rowHtml = `
+                <td>${p.id}</td>
+                <td><code>${p.codigo || '-'}</code></td>  <!-- ← NUEVA COLUMNA CÓDIGO -->
+                <td>${p.nombre}</td>
+                <td>${p.descripcion || ''}</td>
+                <td>$${p.precio.toFixed(2)}</td>
+                <td>${p.impuesto ? p.impuesto.descripcion : '-'}</td>`;
+            
+            // Columna tenant solo si el usuario no tiene tenant (admin global)
+            if (!tieneTenant) {
+                const tenantName = p.tenant ? p.tenant.nombre : (p.tenant_id || 'Sin asignar');
+                rowHtml += `<td>${tenantName}</td>`;
+            }
+            
+            rowHtml += `
+                <td>
+                    <button class="btn btn-sm btn-outline-warning" onclick="editarProducto(${p.id})" ${!tieneTenant ? 'disabled' : ''}>
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="eliminarProducto(${p.id})" ${!tieneTenant ? 'disabled' : ''}>
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>`;
+            
+            tr.innerHTML = rowHtml;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function limpiarFormulario() {
+        document.getElementById("producto-id").value = "";
+        document.getElementById("codigo").value = "";  // ← NUEVO
+        document.getElementById("nombre").value = "";
+        document.getElementById("descripcion").value = "";
+        document.getElementById("precio").value = "";
+        document.getElementById("impuesto-id").value = "";
+        document.getElementById("modalTitulo").innerText = "Nuevo Producto";
+    }
+
+    async function editarProducto(id) {
+        try {
+            const resp = await fetch(`${API_URL}/productos/${id}`, { headers: getAuthHeaders() });
+            if (!resp.ok) throw new Error("Producto no encontrado");
+            const p = await resp.json();
+            
+            document.getElementById("producto-id").value = p.id;
+            document.getElementById("codigo").value = p.codigo || "";  // ← NUEVO
+            document.getElementById("nombre").value = p.nombre;
+            document.getElementById("descripcion").value = p.descripcion || "";
+            document.getElementById("precio").value = p.precio;
+            document.getElementById("impuesto-id").value = p.impuesto ? p.impuesto.id : "";
+            document.getElementById("modalTitulo").innerText = "Editar Producto";
+            
+            new bootstrap.Modal(document.getElementById('modalProducto')).show();
+        } catch (e) {
+            alert("Error al cargar producto: " + e.message);
+        }
+    }
+
+    async function guardarProducto() {
+        const id = document.getElementById("producto-id").value;
+        const data = {
+            nombre: document.getElementById("nombre").value,
+            codigo: document.getElementById("codigo").value || null,  // ← NUEVO
+            descripcion: document.getElementById("descripcion").value || null,
+            precio: parseFloat(document.getElementById("precio").value),
+            impuesto_id: document.getElementById("impuesto-id").value || null
+        };
+        
+        // Limpiar valores vacíos
+        if (data.codigo === "") data.codigo = null;
+        if (data.impuesto_id === "") data.impuesto_id = null;
+
+        const url = id ? `${API_URL}/productos/${id}` : `${API_URL}/productos/`;
+        const method = id ? "PUT" : "POST";
+
+        try {
+            const resp = await fetch(url, {
+                method,
+                headers: getAuthHeaders(),
+                body: JSON.stringify(data)
+            });
+            
+            if (!resp.ok) {
+                const error = await resp.json();
+                throw new Error(error.detail || "Error al guardar");
+            }
+            
+            await cargarProductos();
+            bootstrap.Modal.getInstance(document.getElementById('modalProducto')).hide();
+        } catch (e) {
+            alert("Error: " + e.message);
+        }
+    }
+
+    async function eliminarProducto(id) {
+        if (!confirm("¿Eliminar este producto?")) return;
+        try {
+            const resp = await fetch(`${API_URL}/productos/${id}`, {
+                method: "DELETE",
+                headers: getAuthHeaders()
+            });
+            if (!resp.ok) {
+                const error = await resp.json();
+                throw new Error(error.detail || "Error al eliminar");
+            }
+            await cargarProductos();
+        } catch (e) {
+            alert("Error: " + e.message);
+        }
+    }
+</script>
+
+<style>
+    /* Estilo para el código */
+    code {
+        background-color: #f8f9fa;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.85em;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Mi Empresa{% endblock %}
+
+{% block content %}
+<h3>🏢 Datos de la Empresa</h3>
+
+{% if empresa %}
+<form method="POST" action="{{ url_for('empresa.actualizar') }}">
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label class="form-label">Nombre Comercial</label>
+            <input class="form-control" value="{{ empresa.nombre }}" disabled>
+            <small class="text-muted">Solo el administrador global puede cambiar el nombre comercial.</small>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Razón Social</label>
+            <input class="form-control" name="razon_social" value="{{ empresa.razon_social or '' }}">
+        </div>
+    </div>
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <label class="form-label">RUT</label>
+            <input class="form-control" name="rut" value="{{ empresa.rut or '' }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">DV</label>
+            <input class="form-control" name="dv" value="{{ empresa.dv or '' }}" maxlength="1">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Giro</label>
+            <input class="form-control" name="giro" value="{{ empresa.giro or '' }}">
+        </div>
+    </div>
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label class="form-label">Dirección</label>
+            <input class="form-control" name="direccion" value="{{ empresa.direccion or '' }}">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Teléfono</label>
+            <input class="form-control" name="telefono" value="{{ empresa.telefono or '' }}">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Email</label>
+            <input class="form-control" name="email" value="{{ empresa.email or '' }}">
+        </div>
+    </div>
+    <div class="row mb-3">
+    <div class="col-md-6">
+        <label class="form-label">Ciudad</label>
+        <input class="form-control" name="ciudad" value="{{ empresa.ciudad or '' }}">
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Comuna</label>
+        <input class="form-control" name="comuna" value="{{ empresa.comuna or '' }}">
+    </div>
+</div>
+    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+</form>
+{% else %}
+<div class="alert alert-warning">No se pudieron cargar los datos de la empresa. Asegúrate de tener un tenant asignado.</div>
+{% endif %}
+{% endblock %}

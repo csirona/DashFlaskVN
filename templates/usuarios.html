@@ -1,0 +1,283 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Usuarios - Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>👥 Usuarios</h3>
+    <div>
+        <button class="btn btn-outline-secondary me-2" onclick="cargarUsuarios()">
+            <i class="bi bi-arrow-clockwise"></i> Cargar
+        </button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalUsuario" onclick="limpiarFormulario()">
+            <i class="bi bi-plus-lg"></i> Nuevo Usuario
+        </button>
+    </div>
+</div>
+
+<!-- Tabla de usuarios -->
+<div class="card shadow-sm">
+    <div class="card-body">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Usuario</th>
+                    <th>Rol</th>
+                    <th>Tenant</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-usuarios">
+                <tr id="sin-datos">
+                    <td colspan="5" class="text-center text-muted py-4">
+                        <i class="bi bi-info-circle"></i> Cargando usuarios...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal para crear/editar usuario -->
+<div class="modal fade" id="modalUsuario" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitulo">Nuevo Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="form-usuario">
+                    <input type="hidden" id="usuario-id">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre de usuario</label>
+                        <input type="text" class="form-control" id="username" required>
+                    </div>
+                    <div class="mb-3" id="password-container">
+                        <label class="form-label">Contraseña</label>
+                        <input type="password" class="form-control" id="password" placeholder="Contraseña">
+                        <small class="text-muted" id="password-help">La contraseña es obligatoria para nuevos usuarios.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Rol</label>
+                        <select class="form-select" id="rol">
+                            <option value="admin">Admin</option>
+                            <option value="cliente" selected>Cliente</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tenant</label>
+                        <select class="form-select" id="tenant-id">
+                            <option value="">Sin tenant (admin global)</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarUsuario()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const API_URL = "http://127.0.0.1:8000";
+
+    // Cargar tenants para el selector
+    async function cargarTenantsParaSelect() {
+        try {
+            const resp = await fetch(`${API_URL}/tenants/`, {
+                headers: { "Authorization": "Bearer {{ session.get('token') }}" }
+            });
+            if (!resp.ok) throw new Error("Error al cargar tenants");
+            const tenants = await resp.json();
+            const select = document.getElementById("tenant-id");
+            // Mantener opción "Sin tenant" y añadir las demás
+            select.innerHTML = '<option value="">Sin tenant (admin global)</option>';
+            tenants.forEach(t => {
+                const option = document.createElement("option");
+                option.value = t.id;
+                option.textContent = t.nombre;
+                select.appendChild(option);
+            });
+        } catch (e) {
+            console.error("Error cargando tenants:", e);
+        }
+    }
+
+    // Cargar usuarios desde la API
+    async function cargarUsuarios() {
+        try {
+            const resp = await fetch(`${API_URL}/usuarios/`, {
+                headers: { "Authorization": "Bearer {{ session.get('token') }}" }
+            });
+            if (!resp.ok) {
+                const errorData = await resp.json().catch(() => ({}));
+                throw new Error(errorData.detail || `Error ${resp.status}`);
+            }
+            const usuarios = await resp.json();
+            renderTabla(usuarios);
+        } catch (e) {
+            alert("Error al cargar usuarios: " + e.message);
+        }
+    }
+
+    function renderTabla(usuarios) {
+        const tbody = document.getElementById("tabla-usuarios");
+        tbody.innerHTML = "";
+        if (usuarios.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">
+                <i class="bi bi-inbox"></i> No hay usuarios registrados
+            </td></tr>`;
+            return;
+        }
+        usuarios.forEach(u => {
+            const tr = document.createElement("tr");
+            tr.id = `fila-${u.id}`;
+            tr.innerHTML = `
+                <td>${u.id}</td>
+                <td>${u.username}</td>
+                <td>${u.role}</td>
+                <td>${u.tenant_id ?? 'Sin asignar'}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-warning" onclick="editarUsuario(${u.id}, '${u.username}', '${u.role}', ${u.tenant_id ?? null})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger disabled" title="No disponible">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function limpiarFormulario() {
+        document.getElementById("usuario-id").value = "";
+        document.getElementById("username").value = "";
+        document.getElementById("password").value = "";
+        document.getElementById("rol").value = "cliente";
+        document.getElementById("tenant-id").value = "";
+        document.getElementById("modalTitulo").innerText = "Nuevo Usuario";
+        // Mostrar campo de contraseña y hacerlo requerido
+        document.getElementById("password-container").style.display = "block";
+        document.getElementById("password").required = true;
+        document.getElementById("password-help").innerText = "La contraseña es obligatoria para nuevos usuarios.";
+    }
+
+    async function editarUsuario(id, username, role, tenant_id) {
+        // Llenar formulario con los datos actuales
+        document.getElementById("usuario-id").value = id;
+        document.getElementById("username").value = username;
+        document.getElementById("rol").value = role;
+        document.getElementById("tenant-id").value = tenant_id !== null ? tenant_id : "";
+        document.getElementById("modalTitulo").innerText = "Editar Usuario";
+        // Mostrar campo de contraseña (no obligatorio) y cambiar el texto de ayuda
+        document.getElementById("password-container").style.display = "block";
+        document.getElementById("password").value = "";  // limpiar por si acaso
+        document.getElementById("password").required = false;
+        document.getElementById("password-help").innerText = "Dejar vacío para mantener la contraseña actual.";
+        // Mostrar modal
+        new bootstrap.Modal(document.getElementById('modalUsuario')).show();
+    }
+
+    async function guardarUsuario() {
+        const id = document.getElementById("usuario-id").value;
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
+        const role = document.getElementById("rol").value;
+        const tenant_id = document.getElementById("tenant-id").value;   // puede ser "" o un número
+
+        if (!username) {
+            alert("El nombre de usuario es obligatorio.");
+            return;
+        }
+
+        if (!id && !password) {
+            alert("La contraseña es obligatoria para nuevos usuarios.");
+            return;
+        }
+
+        try {
+            let resp;
+            if (!id) {
+                // Crear usuario (POST /register)
+                const formData = new URLSearchParams();
+                formData.append("username", username);
+                formData.append("password", password);
+                formData.append("role", role);
+                if (tenant_id) formData.append("tenant_id", tenant_id);
+
+                resp = await fetch(`${API_URL}/register`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": "Bearer {{ session.get('token') }}",
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: formData.toString()
+                });
+            } else {
+                // Actualizar datos generales (PUT /usuarios/{id})
+                const body = {
+                    username: username,
+                    role: role,
+                    tenant_id: tenant_id !== "" ? parseInt(tenant_id) : null
+                };
+
+                resp = await fetch(`${API_URL}/usuarios/${id}`, {
+                    method: "PUT",
+                    headers: {
+                        "Authorization": "Bearer {{ session.get('token') }}",
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!resp.ok) {
+                    const error = await resp.json();
+                    throw new Error(error.detail || "Error al actualizar usuario");
+                }
+
+                // Si se escribió una nueva contraseña, cambiarla
+                if (password) {
+                    const passResp = await fetch(`${API_URL}/usuarios/${id}/password`, {
+                        method: "PUT",
+                        headers: {
+                            "Authorization": "Bearer {{ session.get('token') }}",
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({ new_password: password })
+                    });
+                    if (!passResp.ok) {
+                        const passError = await passResp.json();
+                        throw new Error(passError.detail || "Error al cambiar contraseña");
+                    }
+                }
+
+                // Si todo salió bien, resp.ok ya era true; no necesitamos otra verificación.
+            }
+
+            if (!resp.ok && id) {
+                // Este caso ya se cubrió arriba, pero si estamos aquí es por la primera petición de edición que falló.
+                const error = await resp.json();
+                throw new Error(error.detail || "Error al guardar cambios");
+            }
+
+            await cargarUsuarios();   // Refrescar tabla
+            bootstrap.Modal.getInstance(document.getElementById('modalUsuario')).hide();
+        } catch (e) {
+            alert("Error: " + e.message);
+        }
+    }
+
+    // Inicializar página
+    document.addEventListener("DOMContentLoaded", function() {
+        cargarTenantsParaSelect();
+        cargarUsuarios();
+    });
+</script>
+{% endblock %}

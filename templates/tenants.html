@@ -1,0 +1,183 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Tenants - Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>🏢 Tenants</h3>
+    <div>
+        <button class="btn btn-outline-secondary me-2" onclick="cargarTenants()">
+            <i class="bi bi-arrow-clockwise"></i> Cargar
+        </button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalTenant" onclick="limpiarFormulario()">
+            <i class="bi bi-plus-lg"></i> Nuevo Tenant
+        </button>
+    </div>
+</div>
+
+<!-- Tabla de tenants -->
+<div class="card shadow-sm">
+    <div class="card-body">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-tenants">
+                <tr id="sin-datos">
+                    <td colspan="3" class="text-center text-muted py-4">
+                        <i class="bi bi-info-circle"></i> Presione "Cargar" para ver los tenants
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal para crear/editar tenant -->
+<div class="modal fade" id="modalTenant" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitulo">Nuevo Tenant</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="form-tenant">
+                    <input type="hidden" id="tenant-id">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre del tenant</label>
+                        <input type="text" class="form-control" id="nombre" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarTenant()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const API_URL = "http://127.0.0.1:8000";
+
+    function getAuthHeaders() {
+        return {
+            "Authorization": "Bearer {{ session.get('token') }}",
+            "Content-Type": "application/json"
+        };
+    }
+
+    // Cargar todos los tenants desde la API
+    async function cargarTenants() {
+        try {
+            const resp = await fetch(`${API_URL}/tenants/`, { 
+                headers: {
+                    "Authorization": "Bearer {{ session.get('token') }}"
+                } 
+            });
+            if (!resp.ok) {
+                const errorData = await resp.json().catch(() => ({}));
+                throw new Error(errorData.detail || `Error ${resp.status}: ${resp.statusText}`);
+            }
+            const tenants = await resp.json();
+            renderTabla(tenants);
+        } catch (e) {
+            alert("Error al cargar tenants: " + e.message);
+        }
+    }
+
+    function renderTabla(tenants) {
+        const tbody = document.getElementById("tabla-tenants");
+        tbody.innerHTML = "";
+        if (tenants.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">
+                <i class="bi bi-inbox"></i> No hay tenants registrados
+            </td></tr>`;
+            return;
+        }
+        tenants.forEach(t => {
+            const tr = document.createElement("tr");
+            tr.id = `fila-${t.id}`;
+            tr.innerHTML = `
+                <td>${t.id}</td>
+                <td>${t.nombre}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-warning" onclick="editarTenant(${t.id}, '${t.nombre}')">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="eliminarTenant(${t.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function limpiarFormulario() {
+        document.getElementById("tenant-id").value = "";
+        document.getElementById("nombre").value = "";
+        document.getElementById("modalTitulo").innerText = "Nuevo Tenant";
+    }
+
+    function editarTenant(id, nombre) {
+        document.getElementById("tenant-id").value = id;
+        document.getElementById("nombre").value = nombre;
+        document.getElementById("modalTitulo").innerText = "Editar Tenant";
+        new bootstrap.Modal(document.getElementById('modalTenant')).show();
+    }
+
+    async function guardarTenant() {
+        const id = document.getElementById("tenant-id").value;
+        const nombre = document.getElementById("nombre").value;
+
+        if (!nombre) {
+            alert("El nombre del tenant es obligatorio.");
+            return;
+        }
+
+        const url = id ? `${API_URL}/tenants/${id}` : `${API_URL}/tenants/`;
+        const method = id ? "PUT" : "POST";
+
+        try {
+            const resp = await fetch(url, {
+                method: method,
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ nombre: nombre })
+            });
+            if (!resp.ok) {
+                const error = await resp.json();
+                throw new Error(error.detail || "Error al guardar tenant");
+            }
+            await cargarTenants();
+            bootstrap.Modal.getInstance(document.getElementById('modalTenant')).hide();
+        } catch (e) {
+            alert("Error: " + e.message);
+        }
+    }
+
+    async function eliminarTenant(id) {
+        if (!confirm("¿Eliminar este tenant? Se perderán todos sus datos asociados.")) return;
+        try {
+            const resp = await fetch(`${API_URL}/tenants/${id}`, {
+                method: "DELETE",
+                headers: getAuthHeaders()
+            });
+            if (!resp.ok) {
+                const error = await resp.json();
+                throw new Error(error.detail || "Error al eliminar tenant");
+            }
+            await cargarTenants();
+        } catch (e) {
+            alert("Error: " + e.message);
+        }
+    }
+</script>
+{% endblock %}

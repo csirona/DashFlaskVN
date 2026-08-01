@@ -1,0 +1,134 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Clientes{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>🏢 Clientes</h3>
+    {% if tenant_id %}
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCliente" onclick="resetModal()">
+        ➕ Nuevo Cliente
+    </button>
+    {% endif %}
+</div>
+
+{% if clientes %}
+<div class="table-responsive">
+    <table class="table table-striped table-hover align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Razón Social</th>
+                <th>Giro</th>
+                <th>Comuna</th>
+                <th>Ciudad</th>
+                <th>Dirección</th>
+                <th class="text-center">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente.razon_social }}</td>
+                <td>{{ cliente.giro }}</td>
+                <td>{{ cliente.comuna }}</td>
+                <td>{{ cliente.ciudad }}</td>
+                <td>{{ cliente.direccion }}</td>
+                <td class="text-center">
+                    {% if tenant_id %}
+                    <button class="btn btn-sm btn-outline-secondary me-1"
+                            onclick="editCliente('{{ cliente.id }}',
+                                                 '{{ cliente.razon_social|e }}',
+                                                 '{{ cliente.giro|e }}',
+                                                 '{{ cliente.comuna|e }}',
+                                                 '{{ cliente.ciudad|e }}',
+                                                 '{{ cliente.direccion|e }}')">
+                        ✏️ Editar
+                    </button>
+                    <form action="{{ url_for('clientes.eliminar', cliente_id=cliente.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Eliminar este cliente?')">🗑️ Eliminar</button>
+                    </form>
+                    {% else %}
+                    <span class="text-muted">Sin permisos</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="alert alert-warning">No hay clientes registrados. ¡Crea el primero!</div>
+{% endif %}
+
+<!-- Modal para Crear / Editar Cliente -->
+<div class="modal fade" id="modalCliente" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="formCliente" method="POST" action="{{ url_for('clientes.crear') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">Nuevo Cliente</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Razón Social</label>
+                            <input type="text" class="form-control" name="razon_social" id="modal_razon_social" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Giro</label>
+                            <input type="text" class="form-control" name="giro" id="modal_giro" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Comuna</label>
+                            <input type="text" class="form-control" name="comuna" id="modal_comuna" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Ciudad</label>
+                            <input type="text" class="form-control" name="ciudad" id="modal_ciudad" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Dirección</label>
+                        <input type="text" class="form-control" name="direccion" id="modal_direccion" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Resetear modal para modo creación
+    function resetModal() {
+        document.getElementById('formCliente').action = "{{ url_for('clientes.crear') }}";
+        document.getElementById('modalTitle').textContent = 'Nuevo Cliente';
+        document.getElementById('modal_razon_social').value = '';
+        document.getElementById('modal_giro').value = '';
+        document.getElementById('modal_comuna').value = '';
+        document.getElementById('modal_ciudad').value = '';
+        document.getElementById('modal_direccion').value = '';
+    }
+
+    // Cargar datos de cliente en el modal para editar
+    function editCliente(id, razon, giro, comuna, ciudad, direccion) {
+        document.getElementById('formCliente').action = "{{ url_for('clientes.editar', cliente_id=0) }}".replace('/0', '/' + id);
+        document.getElementById('modalTitle').textContent = 'Editar Cliente';
+        document.getElementById('modal_razon_social').value = razon;
+        document.getElementById('modal_giro').value = giro;
+        document.getElementById('modal_comuna').value = comuna;
+        document.getElementById('modal_ciudad').value = ciudad;
+        document.getElementById('modal_direccion').value = direccion;
+        var modal = new bootstrap.Modal(document.getElementById('modalCliente'));
+        modal.show();
+    }
+</script>
+{% endblock %}
