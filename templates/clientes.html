@@ -3,6 +3,18 @@
 {% block title %}Clientes{% endblock %}
 
 {% block content %}
+
+{% macro sort_link(field, label) %}
+{% set next_order = 'desc' if (sort == field and order == 'asc') else 'asc' %}
+<a href="{{ url_for('clientes.listar', q=q, ciudad=ciudad_filtro, sort=field, order=next_order) }}"
+   class="text-decoration-none text-white d-inline-flex align-items-center gap-1">
+    {{ label }}
+    {% if sort == field %}
+        <i class="bi bi-caret-{{ 'up' if order == 'asc' else 'down' }}-fill small"></i>
+    {% endif %}
+</a>
+{% endmacro %}
+
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3>🏢 Clientes</h3>
     {% if tenant_id %}
@@ -12,15 +24,43 @@
     {% endif %}
 </div>
 
+<form method="GET" action="{{ url_for('clientes.listar') }}" class="row g-2 mb-3">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="order" value="{{ order }}">
+
+    <div class="col-md-5">
+        <input type="text" class="form-control" name="q"
+               placeholder="Buscar por razón social, giro o comuna..." value="{{ q }}">
+    </div>
+
+    <div class="col-md-4">
+        <select class="form-select" name="ciudad">
+            <option value="">Todas las ciudades</option>
+            {% for c in ciudades %}
+            <option value="{{ c }}" {% if ciudad_filtro == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="col-md-3 d-flex gap-2">
+        <button type="submit" class="btn btn-outline-primary flex-fill">
+            <i class="bi bi-funnel"></i> Filtrar
+        </button>
+        <a href="{{ url_for('clientes.listar') }}" class="btn btn-outline-secondary" title="Limpiar filtros">
+            <i class="bi bi-x-lg"></i>
+        </a>
+    </div>
+</form>
+
 {% if clientes %}
 <div class="table-responsive">
     <table class="table table-striped table-hover align-middle">
         <thead class="table-dark">
             <tr>
-                <th>Razón Social</th>
-                <th>Giro</th>
-                <th>Comuna</th>
-                <th>Ciudad</th>
+                <th>{{ sort_link('razon_social', 'Razón Social') }}</th>
+                <th>{{ sort_link('giro', 'Giro') }}</th>
+                <th>{{ sort_link('comuna', 'Comuna') }}</th>
+                <th>{{ sort_link('ciudad', 'Ciudad') }}</th>
                 <th>Dirección</th>
                 <th class="text-center">Acciones</th>
             </tr>
@@ -57,7 +97,13 @@
     </table>
 </div>
 {% else %}
-<div class="alert alert-warning">No hay clientes registrados. ¡Crea el primero!</div>
+<div class="alert alert-warning">
+    {% if q or ciudad_filtro %}
+        No hay clientes que coincidan con el filtro.
+    {% else %}
+        No hay clientes registrados. ¡Crea el primero!
+    {% endif %}
+</div>
 {% endif %}
 
 <!-- Modal para Crear / Editar Cliente -->

@@ -20,6 +20,10 @@ def listar():
     # Obtener clientes para el modal de nueva venta
     resp_clientes = requests.get(f"{API_URL}/clientes/", headers=headers)
     clientes = resp_clientes.json() if resp_clientes.status_code == 200 else []
+
+    # Mapa id -> razón social, para el detalle de venta (evita armar el
+    # objeto a mano con un {% for %} dentro del <script>)
+    clientes_map = {c["id"]: c["razon_social"] for c in clientes if "id" in c}
     
     # Obtener productos (solo para referencias, ya no para select)
     resp_productos = requests.get(f"{API_URL}/productos/", headers=headers)
@@ -33,6 +37,7 @@ def listar():
         "ventas.html",
         ventas=ventas,
         clientes=clientes,
+        clientes_map=clientes_map,
         productos=productos,
         impuestos=impuestos,
         username=session.get("username"),
@@ -159,3 +164,29 @@ def anular(venta_id):
         flash(error_msg, "danger")
     
     return redirect(url_for("ventas.listar"))
+
+
+@ventas_bp.route("/api/detalle/<int:venta_id>")
+@login_required()
+def detalle_api(venta_id):
+    """
+    Endpoint intermedio para obtener el detalle completo de una venta vía AJAX.
+    """
+    headers = get_headers()
+    try:
+        resp = requests.get(f"{API_URL}/ventas/{venta_id}", headers=headers, timeout=5)
+
+        if resp.status_code == 200:
+            print(resp.json())
+            return jsonify(resp.json())
+
+        try:
+            error_msg = resp.json().get("detail", "No se pudo obtener la venta")
+        except ValueError:
+            error_msg = "No se pudo obtener la venta"
+        return jsonify({"error": error_msg}), resp.status_code
+
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Tiempo de espera agotado"}), 504
+    except requests.exceptions.RequestException:
+        return jsonify({"error": "Servicio no disponible"}), 503

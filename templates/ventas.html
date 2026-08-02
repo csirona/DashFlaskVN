@@ -51,6 +51,9 @@
                     {% endif %}
                 </td>
                 <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-primary me-1 btn-ver-venta" data-id="{{ venta.id }}">
+                        👁️ Ver
+                    </button>
                     {% if tenant_id and venta.estado == 'completada' %}
                     <form action="{{ url_for('ventas.anular', venta_id=venta.id) }}" method="POST" style="display:inline;">
                         <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Anular esta venta?')">❌ Anular</button>
@@ -176,6 +179,27 @@
     </div>
 </div>
 {% endif %}
+
+<!-- ============================================================ -->
+<!-- MODAL VER DETALLE DE VENTA -->
+<!-- ============================================================ -->
+<div class="modal fade" id="modalDetalleVenta" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="bi bi-receipt"></i> Detalle de Venta</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detalleVentaBody">
+                <!-- Contenido cargado vía AJAX -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script id="clientes-data" type="application/json">{{ clientes_map|tojson }}</script>
 {% endblock %}
 
 {% block scripts %}
@@ -225,7 +249,7 @@ function agregarLinea() {
         </td>
         <td>
             <input type="number" class="form-control form-control-sm text-center cantidad-input" 
-                   name="cantidad[]" value="1" min="0.01" step="0.01" 
+                   name="cantidad[]" value="1" min="0" step="1" 
                    oninput="calcularSubtotal(${lineaCount})">
         </td>
         <td>
@@ -507,7 +531,133 @@ document.addEventListener('DOMContentLoaded', function() {
     if (clienteSelect) {
         clienteSelect.addEventListener('change', actualizarTotales);
     }
+
+    // Botones "Ver" de la tabla de ventas
+    document.querySelectorAll('.btn-ver-venta').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            verDetalleVenta(this.dataset.id);
+        });
+    });
+
+    // Fix del warning de aria-hidden en el modal de detalle
+    const modalDetalle = document.getElementById('modalDetalleVenta');
+    modalDetalle.addEventListener('hide.bs.modal', function() {
+        if (document.activeElement && modalDetalle.contains(document.activeElement)) {
+            document.activeElement.blur();
+        }
+    });
 });
+
+
+
+// ============================================================
+// MAPA DE CLIENTES (id -> razón social), armado desde el template
+// para no depender de que la API anide el cliente en cada venta
+// ============================================================
+const CLIENTES_MAP = JSON.parse(document.getElementById('clientes-data').textContent);
+
+// ============================================================
+// VER DETALLE DE VENTA
+// ============================================================
+function verDetalleVenta(ventaId) {
+    const modalBody = document.getElementById('detalleVentaBody');
+    modalBody.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-2 mb-0">Cargando detalle...</p>
+        </div>`;
+
+    const modal = new bootstrap.Modal(document.getElementById('modalDetalleVenta'));
+    modal.show();
+
+    fetch(`/ventas/api/detalle/${ventaId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                modalBody.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                return;
+            }
+            renderDetalleVenta(data);
+        })
+        .catch(() => {
+            modalBody.innerHTML = '<div class="alert alert-danger">Error al cargar el detalle de la venta</div>';
+        });
+}
+
+function renderDetalleVenta(venta) {
+    const modalBody = document.getElementById('detalleVentaBody');
+    const clienteNombre = CLIENTES_MAP[venta.cliente_id] || `Cliente #${venta.cliente_id}`;
+    const fecha = venta.fecha ? venta.fecha.substring(0, 10) : '';
+    const estadoBadge = venta.estado === 'completada'
+        ? '<span class="badge bg-success">Completada</span>'
+        : '<span class="badge bg-danger">Anulada</span>';
+
+    const detalles = venta.detalles || [];
+    let filasDetalle = '';
+
+    if (detalles.length === 0) {
+        filasDetalle = '<tr><td colspan="4" class="text-center text-muted py-3">Sin líneas de detalle</td></tr>';
+    } else {
+        detalles.forEach(d => {
+            const nombreProducto = d.producto ? d.producto.nombre : `Producto #${d.producto_id}`;
+            const codigo = (d.producto && d.producto.codigo) ? ` <small class="text-muted">[${d.producto.codigo}]</small>` : '';
+            const subtotalLinea = d.subtotal !== undefined ? d.subtotal : (d.cantidad * d.precio_unitario);
+
+            filasDetalle += `
+                <tr>
+                    <td>${nombreProducto}${codigo}</td>
+                    <td class="text-center">${d.cantidad}</td>
+                    <td class="text-end">$${Number(d.precio_unitario).toLocaleString('es-CL')}</td>
+                    <td class="text-end">$${Number(subtotalLinea).toLocaleString('es-CL')}</td>
+                </tr>`;
+        });
+    }
+
+    modalBody.innerHTML = `
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <strong>Cliente:</strong> ${clienteNombre}<br>
+                <strong>Fecha:</strong> ${fecha} ${venta.hora || ''}<br>
+                <strong>Comprobante:</strong> <span class="badge bg-secondary">${venta.tipo_comprobante}</span>
+            </div>
+            <div class="col-md-6 text-md-end">
+                <strong>Estado:</strong> ${estadoBadge}<br>
+                ${venta.observaciones ? `<strong>Obs:</strong> ${venta.observaciones}` : ''}
+            </div>
+        </div>
+
+        <table class="table table-bordered table-sm">
+            <thead class="table-light">
+                <tr>
+                    <th>Producto</th>
+                    <th class="text-center">Cantidad</th>
+                    <th class="text-end">Precio Unit.</th>
+                    <th class="text-end">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${filasDetalle}
+            </tbody>
+            <tfoot class="table-group-divider">
+                <tr>
+                    <td colspan="3" class="text-end"><strong>Subtotal (neto):</strong></td>
+                    <td class="text-end">$${Number(venta.subtotal).toLocaleString('es-CL')}</td>
+                </tr>
+                <tr>
+                    <td colspan="3" class="text-end"><strong>IVA:</strong></td>
+                    <td class="text-end">$${Number(venta.iva).toLocaleString('es-CL')}</td>
+                </tr>
+                <tr>
+                    <td colspan="3" class="text-end"><strong>Otros Impuestos:</strong></td>
+                    <td class="text-end">$${Number(venta.impuesto).toLocaleString('es-CL')}</td>
+                </tr>
+                <tr class="table-success">
+                    <td colspan="3" class="text-end fw-bold fs-6">TOTAL:</td>
+                    <td class="text-end fw-bold fs-6">$${Number(venta.total).toLocaleString('es-CL')}</td>
+                </tr>
+            </tfoot>
+        </table>`;
+}
 </script>
 
 <style>

@@ -3,6 +3,18 @@
 {% block title %}Productos{% endblock %}
 
 {% block content %}
+
+{% macro sort_link(field, label) %}
+{% set next_order = 'desc' if (sort == field and order == 'asc') else 'asc' %}
+<a href="{{ url_for('productos.listar', q=q, impuesto_id=impuesto_filtro, tenant_id=tenant_filtro, sort=field, order=next_order) }}"
+   class="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+    {{ label }}
+    {% if sort == field %}
+        <i class="bi bi-caret-{{ 'up' if order == 'asc' else 'down' }}-fill small"></i>
+    {% endif %}
+</a>
+{% endmacro %}
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h3>📦 Productos</h3>
     <div>
@@ -13,28 +25,121 @@
     </div>
 </div>
 
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<!-- Filtros -->
+<form method="GET" action="{{ url_for('productos.listar') }}" class="row g-2 mb-3">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="order" value="{{ order }}">
+
+    <div class="col-md-4">
+        <input type="text" class="form-control" name="q"
+               placeholder="Buscar por nombre o código..." value="{{ q }}">
+    </div>
+
+    <div class="col-md-3">
+        <select class="form-select" name="impuesto_id">
+            <option value="">Todos los impuestos</option>
+            <option value="sin" {% if impuesto_filtro == 'sin' %}selected{% endif %}>Sin impuesto</option>
+            {% for impuesto in impuestos %}
+            <option value="{{ impuesto.id }}" {% if impuesto_filtro == impuesto.id|string %}selected{% endif %}>
+                {{ impuesto.descripcion }} ({{ impuesto.tasa }}%)
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    {% if not tiene_tenant %}
+    <div class="col-md-3">
+        <select class="form-select" name="tenant_id">
+            <option value="">Todos los tenants</option>
+            <option value="sin" {% if tenant_filtro == 'sin' %}selected{% endif %}>Sin asignar</option>
+            {% for t in tenants %}
+            <option value="{{ t.id }}" {% if tenant_filtro == t.id|string %}selected{% endif %}>
+                {{ t.nombre }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+
+    <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-outline-primary flex-fill">
+            <i class="bi bi-funnel"></i> Filtrar
+        </button>
+        <a href="{{ url_for('productos.listar') }}" class="btn btn-outline-secondary" title="Limpiar filtros">
+            <i class="bi bi-x-lg"></i>
+        </a>
+    </div>
+</form>
+
 <!-- Tabla de productos -->
 <div class="card shadow-sm">
     <div class="card-body">
         <table class="table table-hover">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Código</th>  <!-- ← NUEVA COLUMNA -->
-                    <th>Nombre</th>
+                    <th>{{ sort_link('id', 'ID') }}</th>
+                    <th>{{ sort_link('codigo', 'Código') }}</th>
+                    <th>{{ sort_link('nombre', 'Nombre') }}</th>
                     <th>Descripción</th>
-                    <th>Precio</th>
+                    <th>{{ sort_link('precio', 'Precio') }}</th>
                     <th>Impuesto</th>
                     {% if not tiene_tenant %}<th>Tenant</th>{% endif %}
                     <th>Acciones</th>
                 </tr>
             </thead>
-            <tbody id="tabla-productos">
-                <tr id="sin-datos">
-                    <td colspan="{{ '8' if not tiene_tenant else '7' }}" class="text-center text-muted py-4">
-                        <i class="bi bi-info-circle"></i> Cargando productos...
+            <tbody>
+                {% if productos|length == 0 %}
+                <tr>
+                    <td colspan="{{ 8 if not tiene_tenant else 7 }}" class="text-center text-muted py-4">
+                        <i class="bi bi-inbox"></i> No hay productos que coincidan con el filtro
                     </td>
                 </tr>
+                {% endif %}
+                {% for p in productos %}
+                <tr>
+                    <td>{{ p.id }}</td>
+                    <td><code>{{ p.codigo or '-' }}</code></td>
+                    <td>{{ p.nombre }}</td>
+                    <td>{{ p.descripcion or '' }}</td>
+                    <td>${{ "%.2f"|format(p.precio) }}</td>
+                    <td>{{ p.impuesto.descripcion if p.impuesto else '-' }}</td>
+                    {% if not tiene_tenant %}
+                    <td>{{ p.tenant.nombre if p.tenant else (p.tenant_id or 'Sin asignar') }}</td>
+                    {% endif %}
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-warning btn-editar"
+                            {% if not tiene_tenant %}disabled{% endif %}
+                            data-id="{{ p.id }}"
+                            data-codigo="{{ p.codigo or '' }}"
+                            data-nombre="{{ p.nombre }}"
+                            data-descripcion="{{ p.descripcion or '' }}"
+                            data-precio="{{ p.precio }}"
+                            data-impuesto-id="{{ p.impuesto.id if p.impuesto else '' }}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+
+                        <form action="{{ url_for('productos.eliminar', producto_id=p.id) }}"
+                              method="POST" class="d-inline"
+                              onsubmit="return confirm('¿Eliminar este producto?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger"
+                                    {% if not tiene_tenant %}disabled{% endif %}>
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
             </tbody>
         </table>
     </div>
@@ -44,52 +149,49 @@
 <div class="modal fade" id="modalProducto" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="modalTitulo">Nuevo Producto</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="form-producto">
-                    <input type="hidden" id="producto-id">
-                    
-                    <!-- CÓDIGO (NUEVO) -->
+            <form id="form-producto" method="POST" action="{{ url_for('productos.crear') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitulo">Nuevo Producto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Código <small class="text-muted">(opcional)</small></label>
-                        <input type="text" class="form-control" id="codigo" 
+                        <input type="text" class="form-control" name="codigo" id="codigo"
                                placeholder="Ej: PROD-001" maxlength="50">
                         <small class="text-muted">Código único del producto (SKU, código de barras, etc.)</small>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label class="form-label">Nombre *</label>
-                        <input type="text" class="form-control" id="nombre" required>
+                        <input type="text" class="form-control" name="nombre" id="nombre" required>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label class="form-label">Descripción</label>
-                        <textarea class="form-control" id="descripcion" rows="2"></textarea>
+                        <textarea class="form-control" name="descripcion" id="descripcion" rows="2"></textarea>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label class="form-label">Precio *</label>
-                        <input type="number" step="0.01" class="form-control" id="precio" required>
+                        <input type="number" step="0.01" class="form-control" name="precio" id="precio" required>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label class="form-label">Impuesto</label>
-                        <select class="form-select" id="impuesto-id">
+                        <select class="form-select" name="impuesto_id" id="impuesto-id">
                             <option value="">Sin impuesto</option>
                             {% for impuesto in impuestos %}
                             <option value="{{ impuesto.id }}">{{ impuesto.descripcion }} ({{ impuesto.tasa }}%)</option>
                             {% endfor %}
                         </select>
                     </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" onclick="guardarProducto()">Guardar</button>
-            </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -97,81 +199,12 @@
 
 {% block scripts %}
 <script>
-    const API_URL = "http://127.0.0.1:8000";
-    const tieneTenant = {{ 'true' if tiene_tenant else 'false' }};
-
-    function getAuthHeaders() {
-        return {
-            "Authorization": "Bearer {{ session.get('token') }}",
-            "Content-Type": "application/json"
-        };
-    }
-
-    document.addEventListener("DOMContentLoaded", cargarProductos);
-
-    async function cargarProductos() {
-        try {
-            const resp = await fetch(`${API_URL}/productos/`, { headers: getAuthHeaders() });
-            if (!resp.ok) throw new Error("Error al cargar productos");
-            const productos = await resp.json();
-            renderTabla(productos);
-        } catch (e) {
-            console.error(e);
-            document.getElementById("tabla-productos").innerHTML = `
-                <tr><td colspan="${tieneTenant ? 7 : 8}" class="text-center text-danger py-4">
-                    Error al cargar productos
-                </td></tr>`;
-        }
-    }
-
-    function renderTabla(productos) {
-        const tbody = document.getElementById("tabla-productos");
-        const colspan = tieneTenant ? 7 : 8;  // ← ACTUALIZADO (7 con tenant, 8 sin tenant)
-        tbody.innerHTML = "";
-        
-        if (productos.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted py-4">
-                <i class="bi bi-inbox"></i> No hay productos
-            </td></tr>`;
-            return;
-        }
-        
-        productos.forEach(p => {
-            const tr = document.createElement("tr");
-            tr.id = `fila-${p.id}`;
-            
-            let rowHtml = `
-                <td>${p.id}</td>
-                <td><code>${p.codigo || '-'}</code></td>  <!-- ← NUEVA COLUMNA CÓDIGO -->
-                <td>${p.nombre}</td>
-                <td>${p.descripcion || ''}</td>
-                <td>$${p.precio.toFixed(2)}</td>
-                <td>${p.impuesto ? p.impuesto.descripcion : '-'}</td>`;
-            
-            // Columna tenant solo si el usuario no tiene tenant (admin global)
-            if (!tieneTenant) {
-                const tenantName = p.tenant ? p.tenant.nombre : (p.tenant_id || 'Sin asignar');
-                rowHtml += `<td>${tenantName}</td>`;
-            }
-            
-            rowHtml += `
-                <td>
-                    <button class="btn btn-sm btn-outline-warning" onclick="editarProducto(${p.id})" ${!tieneTenant ? 'disabled' : ''}>
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="eliminarProducto(${p.id})" ${!tieneTenant ? 'disabled' : ''}>
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </td>`;
-            
-            tr.innerHTML = rowHtml;
-            tbody.appendChild(tr);
-        });
-    }
+    const urlCrear = "{{ url_for('productos.crear') }}";
+    const urlEditarBase = "{{ url_for('productos.editar', producto_id=0) }}"; // termina en /0
 
     function limpiarFormulario() {
-        document.getElementById("producto-id").value = "";
-        document.getElementById("codigo").value = "";  // ← NUEVO
+        document.getElementById("form-producto").action = urlCrear;
+        document.getElementById("codigo").value = "";
         document.getElementById("nombre").value = "";
         document.getElementById("descripcion").value = "";
         document.getElementById("precio").value = "";
@@ -179,82 +212,40 @@
         document.getElementById("modalTitulo").innerText = "Nuevo Producto";
     }
 
-    async function editarProducto(id) {
-        try {
-            const resp = await fetch(`${API_URL}/productos/${id}`, { headers: getAuthHeaders() });
-            if (!resp.ok) throw new Error("Producto no encontrado");
-            const p = await resp.json();
-            
-            document.getElementById("producto-id").value = p.id;
-            document.getElementById("codigo").value = p.codigo || "";  // ← NUEVO
-            document.getElementById("nombre").value = p.nombre;
-            document.getElementById("descripcion").value = p.descripcion || "";
-            document.getElementById("precio").value = p.precio;
-            document.getElementById("impuesto-id").value = p.impuesto ? p.impuesto.id : "";
-            document.getElementById("modalTitulo").innerText = "Editar Producto";
-            
-            new bootstrap.Modal(document.getElementById('modalProducto')).show();
-        } catch (e) {
-            alert("Error al cargar producto: " + e.message);
-        }
+    function editarProducto(btn) {
+        const form = document.getElementById("form-producto");
+        const id = btn.dataset.id;
+
+        form.action = urlEditarBase.replace(/\/0$/, "/" + id);
+
+        document.getElementById("codigo").value = btn.dataset.codigo || "";
+        document.getElementById("nombre").value = btn.dataset.nombre || "";
+        document.getElementById("descripcion").value = btn.dataset.descripcion || "";
+        document.getElementById("precio").value = btn.dataset.precio || "";
+        document.getElementById("impuesto-id").value = btn.dataset.impuestoId || "";
+        document.getElementById("modalTitulo").innerText = "Editar Producto";
+
+        new bootstrap.Modal(document.getElementById('modalProducto')).show();
     }
 
-    async function guardarProducto() {
-        const id = document.getElementById("producto-id").value;
-        const data = {
-            nombre: document.getElementById("nombre").value,
-            codigo: document.getElementById("codigo").value || null,  // ← NUEVO
-            descripcion: document.getElementById("descripcion").value || null,
-            precio: parseFloat(document.getElementById("precio").value),
-            impuesto_id: document.getElementById("impuesto-id").value || null
-        };
-        
-        // Limpiar valores vacíos
-        if (data.codigo === "") data.codigo = null;
-        if (data.impuesto_id === "") data.impuesto_id = null;
-
-        const url = id ? `${API_URL}/productos/${id}` : `${API_URL}/productos/`;
-        const method = id ? "PUT" : "POST";
-
-        try {
-            const resp = await fetch(url, {
-                method,
-                headers: getAuthHeaders(),
-                body: JSON.stringify(data)
+    document.addEventListener("DOMContentLoaded", function() {
+        document.querySelectorAll(".btn-editar").forEach(function(btn) {
+            btn.addEventListener("click", function() {
+                editarProducto(this);
             });
-            
-            if (!resp.ok) {
-                const error = await resp.json();
-                throw new Error(error.detail || "Error al guardar");
-            }
-            
-            await cargarProductos();
-            bootstrap.Modal.getInstance(document.getElementById('modalProducto')).hide();
-        } catch (e) {
-            alert("Error: " + e.message);
-        }
-    }
+        });
 
-    async function eliminarProducto(id) {
-        if (!confirm("¿Eliminar este producto?")) return;
-        try {
-            const resp = await fetch(`${API_URL}/productos/${id}`, {
-                method: "DELETE",
-                headers: getAuthHeaders()
-            });
-            if (!resp.ok) {
-                const error = await resp.json();
-                throw new Error(error.detail || "Error al eliminar");
+        // Fix del warning de aria-hidden: quita el foco antes de ocultar el modal
+        const modalProducto = document.getElementById("modalProducto");
+        modalProducto.addEventListener("hide.bs.modal", function() {
+            if (document.activeElement && modalProducto.contains(document.activeElement)) {
+                document.activeElement.blur();
             }
-            await cargarProductos();
-        } catch (e) {
-            alert("Error: " + e.message);
-        }
-    }
+        });
+    });
 </script>
 
 <style>
-    /* Estilo para el código */
     code {
         background-color: #f8f9fa;
         padding: 2px 6px;

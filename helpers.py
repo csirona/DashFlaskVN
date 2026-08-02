@@ -1,7 +1,7 @@
 # helpers.py
 from flask import session, redirect, url_for
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = "http://api.ventanexo.cl"
 
 def is_logged():
     return "token" in session
